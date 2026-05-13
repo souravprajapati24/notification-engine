@@ -29,6 +29,19 @@ spring:
     listener:
       ack-mode: MANUAL
 
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
 server:
   port: ${SERVER_PORT}
 
@@ -41,5 +54,3 @@ app:
   kafka:
     topics:
       notification-events: notification-events
-    consumer:
-      group-id: notification-engine-group
