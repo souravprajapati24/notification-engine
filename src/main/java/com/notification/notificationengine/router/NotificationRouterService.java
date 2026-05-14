@@ -28,7 +28,7 @@ public class NotificationRouterService {
             switch (channel){
                 case EMAIL -> emailNotificationService.sendEmail(eventDto);
                 case SMS -> smsNotificationService.sendSms(eventDto);
-                case WEBSOCKET -> webSocketNotificationService.sendWebSocket(eventDto);
+                case WEBSOCKET -> webSocketNotificationService.sendWebSocketNotification(eventDto);
                 default -> log.warn("Unsupported notification channel: {}", channel);
             }
         }
