@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -24,6 +25,7 @@ public class EmailNotificationServiceImpl
     private String fromEmail;
 
     @Override
+    @Async
     public void sendEmail(NotificationEventDto eventDto) {
 
         validateEmailEvent(eventDto);

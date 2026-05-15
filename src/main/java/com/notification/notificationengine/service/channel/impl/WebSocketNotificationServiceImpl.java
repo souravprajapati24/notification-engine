@@ -5,32 +5,43 @@ import com.notification.notificationengine.service.channel.WebSocketNotification
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
-@Slf4j
 @RequiredArgsConstructor
-public class WebSocketNotificationServiceImpl implements WebSocketNotificationService {
+@Slf4j
+public class WebSocketNotificationServiceImpl
+        implements WebSocketNotificationService {
 
-    private final SimpMessagingTemplate simpMessagingTemplate;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Override
+    @Async
     public void sendWebSocketNotification(NotificationEventDto eventDto) {
 
-        if(eventDto==null){
-            log.warn("Cannot send Websocket notification: event is null");
+        String userId = eventDto.getUserId();
+        if (userId == null || userId.isBlank()) {
+            log.warn("Cannot send WebSocket notification: missing userId for event {}",
+                    eventDto.getEventId());
             return;
         }
 
-        try {
-            log.info("Sending Websocket notification for event {}",eventDto.getEventId());
+        log.info(
+                "Sending websocket notification to user {}",
+                eventDto.getUserId()
+        );
 
-            simpMessagingTemplate.convertAndSend("/topic/notifications",eventDto);
-            log.info("Websocket notification sent successfully for event {}",eventDto.getEventId());
-        }
-        catch (Exception e){
-            log.error("Failed to send Websocket notification for event {}"
-                    , eventDto.getEventId(), e);
-        }
+        messagingTemplate.convertAndSendToUser(
+                userId,
+                "/queue/notifications",
+                eventDto
+        );
+
+        log.info(
+                "WebSocket notification sent to user {} for event {}",
+                userId,
+                eventDto.getEventId()
+        );
     }
 }
