@@ -12,8 +12,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.util.Map;
 
 @Slf4j
-public class UserHandshakeInterceptor
-        implements HandshakeInterceptor {
+public class UserHandshakeInterceptor implements HandshakeInterceptor {
 
     @Override
     public boolean beforeHandshake(
@@ -22,11 +21,10 @@ public class UserHandshakeInterceptor
             @NonNull WebSocketHandler wsHandler,
             @NonNull Map<String, Object> attributes
     ) {
-
         MultiValueMap<String, String> params = UriComponentsBuilder
-                        .fromUri(request.getURI())
-                        .build()
-                        .getQueryParams();
+                .fromUri(request.getURI())
+                .build()
+                .getQueryParams();
 
         String userId = params.getFirst("userId");
 
@@ -34,9 +32,9 @@ public class UserHandshakeInterceptor
             log.warn("WebSocket connection rejected: missing userId");
             return false;
         }
-        attributes.put("userId", userId);
 
-        log.info("WebSocket handshake initiated for userId={}", userId);
+        attributes.put("userId", userId);
+        log.info("✓ WebSocket handshake initiated - userId: {}", userId);
         return true;
     }
 
@@ -47,10 +45,10 @@ public class UserHandshakeInterceptor
             @NonNull WebSocketHandler wsHandler,
             Exception exception
     ) {
-
         if (exception != null) {
-            log.error("WebSocket handshake failed: {}"
-                    , exception.getMessage(), exception);
+            log.error("✗ WebSocket handshake failed: {}", exception.getMessage(), exception);
+        } else {
+            log.info("✓ WebSocket handshake completed successfully");
         }
     }
 }

@@ -8,8 +8,7 @@ import org.springframework.web.socket.server.support.DefaultHandshakeHandler;
 import java.security.Principal;
 import java.util.Map;
 
-public class UserHandshakeHandler
-        extends DefaultHandshakeHandler {
+public class UserHandshakeHandler extends DefaultHandshakeHandler {
 
     @Override
     protected Principal determineUser(
@@ -17,10 +16,7 @@ public class UserHandshakeHandler
             @NonNull WebSocketHandler wsHandler,
             @NonNull Map<String, Object> attributes
     ) {
-
-        String userId =
-                (String) attributes.get("userId");
-
+        String userId = (String) attributes.get("userId");
         return () -> userId;
     }
 }

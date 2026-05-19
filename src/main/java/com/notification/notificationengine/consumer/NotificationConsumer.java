@@ -1,10 +1,10 @@
 package com.notification.notificationengine.consumer;
 
+
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.notification.notificationengine.dto.NotificationEventDto;
-import com.notification.notificationengine.exceptions.InvalidNotificationEventException;
-import com.notification.notificationengine.exceptions.TransientNotificationException;
-import com.notification.notificationengine.router.NotificationRouterService;
+import com.notification.notificationengine.model.NotificationEvent;
+import com.notification.notificationengine.router.NotificationRouter;
+import com.notification.notificationengine.service.persistenceService.NotificationPersistenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -12,97 +12,69 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
-@Component
+
+@Service
 @RequiredArgsConstructor
 @Slf4j
 public class NotificationConsumer {
 
+    private final NotificationRouter router;
+    private final NotificationPersistenceService persistenceService;
     private final ObjectMapper objectMapper;
-    private final NotificationRouterService notificationRouterService;
 
-    @KafkaListener(topics = "${app.kafka.topics.notification-events}")
-    public void consumeEvent(
-            @Payload String message ,
-            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition ,
+    @KafkaListener(
+            topics = {"${app.kafka.topics.notification-events}"},
+            groupId = "notification-group",
+            containerFactory = "kafkaListenerContainerFactory"
+    )
+    public void consume(
+            @Payload String message,
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
+            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.OFFSET) long offset,
-            Acknowledgment ack){
-        try{
-            log.info(
-                    "Received message from partition {} with offset {}",
-                    partition, offset
+            Acknowledgment ack
+    ) {
+
+        try {
+            log.info("Kafka Message Received - Topic: {}, Partition: {}, Offset: {}",
+                    topic, partition, offset);
+
+            NotificationEvent event = objectMapper.readValue(message, NotificationEvent.class);
+
+            log.debug("Parsed event - User: {}, Type: {}, Channels: {}",
+                    event.getUserId(),
+                    event.getEventType(),
+                    event.getChannels()
             );
 
-            NotificationEventDto eventDto;
 
-            try{
+            NotificationEvent savedEvent = persistenceService.persistEventLogs(event);
+            router.route(savedEvent);
 
-                eventDto = objectMapper.readValue(message, NotificationEventDto.class);
-                log.info("Deserialized event {}",eventDto.getEventId());
-            }
-            catch (Exception e){
-                log.error("Failed to deserialize message from partition {} offset {} : {}"
-                        , partition,offset,e.getMessage());
-                ack.acknowledge();
-                return;
-            }
-            try {
-                validateEvent(eventDto);
-                notificationRouterService.routeNotification(eventDto);
-                log.info("Notification routed successfully for event {}"
-                        ,eventDto.getEventId());
-                ack.acknowledge();
-                log.debug("Message for event {} (partition {} offset {}) acknowledged"
-                        ,eventDto.getEventId(), partition, offset);
-            }
-            catch (TransientNotificationException e){
-                log.warn(
-                        "Transient error routing event {}: {}. Will retry later.",
-                        eventDto.getEventId(), e.getMessage()
-                );
+            log.debug("Event routed to delivery services - ID: {}", savedEvent.getId());
+            ack.acknowledge();
 
-                throw e;
-            }
-            catch (InvalidNotificationEventException e){
-                log.error(
-                        "Invalid notification event {}: {}",
-                        eventDto.getEventId(), e.getMessage()
-                );
-                ack.acknowledge();
-            }
-            catch (Exception e){
-                log.error(
-                        "Unexpected error routing event {}: {}",
-                        eventDto.getEventId(), e.getMessage(), e
-                );
-                throw new TransientNotificationException(
-                        "Unknown error for event: " + eventDto.getEventId(), e
-                );
-            }
+            log.info("Event processed successfully - ID: {}, Topic: {}, Offset: {}",
+                    savedEvent.getId(),
+                    topic,
+                    offset
+            );
 
+        } catch (com.fasterxml.jackson.core.JsonParseException e) {
+            log.error("JSON parsing failed for message - Reason: {}", e.getMessage());
+            throw new RuntimeException("Failed to parse notification event from Kafka", e);
+
+        } catch (Exception e) {
+            log.error("Error processing Kafka message - Topic: {}, Offset: {}, Error: {}",
+                    topic,
+                    offset,
+                    e.getMessage(),
+                    e
+            );
+            throw new RuntimeException("Failed to process notification event", e);
         }
-        catch (Exception e){
-            log.error(
-                    "Critical error in message consumer at partition {} offset {}: {}",
-                    partition, offset, e.getMessage(), e
-            );
-            throw new TransientNotificationException(
-                    "Consumer error at partition " + partition + " offset " + offset, e
-            );
-        }
-
     }
 
-    private void validateEvent(NotificationEventDto eventDto){
-        if (eventDto == null) {
-            throw new InvalidNotificationEventException("Event data is null");
-        }
-        if (eventDto.getEventId() == null) {
-            throw new InvalidNotificationEventException("Event ID is missing");
-        }
-        if (eventDto.getChannels() == null || eventDto.getChannels().isEmpty()) {
-            throw new InvalidNotificationEventException("Channels not specified for event: " + eventDto.getEventId());
-        }
-    }
 }

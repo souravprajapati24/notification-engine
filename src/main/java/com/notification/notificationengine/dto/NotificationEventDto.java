@@ -1,24 +1,33 @@
 package com.notification.notificationengine.dto;
 
-import com.notification.notificationengine.enums.NotificationChannels;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.notification.notificationengine.model.enums.NotificationChannel;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
-@AllArgsConstructor
-@NoArgsConstructor
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class NotificationEventDto {
-    private UUID eventId;
-    private String email;
+
+    @NotBlank(message = "userId cannot be blank")
     private String userId;
-    private String phoneNumber;
-    private List<NotificationChannels> channels;
-    private String subject;
+
+    @NotBlank(message = "eventType cannot be blank")
+    private String eventType;
+
+    @NotBlank(message = "message cannot be blank")
     private String message;
-    private LocalDateTime createdAt;
+
+    @NotEmpty(message = "At least one channel must be specified")
+    private List<NotificationChannel> channels;
+
+    private JsonNode metadata;
 }

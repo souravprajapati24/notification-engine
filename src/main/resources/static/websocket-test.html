@@ -3,179 +3,218 @@
 <head>
     <meta charset="UTF-8">
     <title>WebSocket Notification Test</title>
-
     <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
-
     <style>
-
         body {
             font-family: Arial, sans-serif;
             margin: 40px;
+            background-color: #f5f5f5;
         }
-
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .control-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
         input {
-            padding: 8px;
+            padding: 10px;
             margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
         }
-
         button {
-            padding: 8px 12px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
         }
-
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
         #status {
-            margin-top: 20px;
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
             font-weight: bold;
         }
-
+        .status-connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status-disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
         #notifications {
             margin-top: 20px;
         }
-
         .notification {
-            padding: 12px;
-            margin-bottom: 12px;
-            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid #007bff;
             border-radius: 5px;
-            background-color: #f8f8f8;
+            background-color: #e7f3ff;
+            border-left: 4px solid #007bff;
         }
-
+        .notification-title {
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 8px;
+        }
+        .notification-field {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .timestamp {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
     </style>
 </head>
-
 <body>
+<div class="container">
+    <h1>WebSocket Notification Test - Phase 1</h1>
 
-<h1>WebSocket Notification Test</h1>
+    <div class="control-section">
+        <h3>Connection Settings</h3>
+        <input
+                type="text"
+                id="userId"
+                placeholder="Enter User ID (e.g., user123)"
+                value="user123"
+        />
+        <button onclick="connect()" id="connectBtn">
+            Connect
+        </button>
+        <button onclick="disconnect()" id="disconnectBtn" disabled>
+            Disconnect
+        </button>
+        <div id="status" class="status-disconnected">
+            Status: Disconnected
+        </div>
+    </div>
 
-<input
-        type="text"
-        id="userId"
-        placeholder="Enter User ID"
-/>
-
-<button onclick="connect()">
-    Connect
-</button>
-
-<div id="status"></div>
-
-<div id="notifications"></div>
+    <div id="notifications">
+        <h3>Received Notifications</h3>
+        <p id="noNotifications" style="color: #999;">No notifications received yet...</p>
+    </div>
+</div>
 
 <script>
-
     let stompClient = null;
+    let connected = false;
 
     function connect() {
-
-        const userId =
-            document.getElementById('userId').value;
+        const userId = document.getElementById('userId').value.trim();
 
         if (!userId) {
-
-            alert('Please enter user ID');
-
+            alert('Please enter a valid User ID');
             return;
         }
 
-        const socket =
-            new SockJS('/ws?userId=' + userId);
-
+        const socket = new SockJS('/ws?userId=' + encodeURIComponent(userId));
         stompClient = Stomp.over(socket);
 
-        stompClient.connect({}, function () {
+        stompClient.debug = function() {};
 
-            document.getElementById('status').innerHTML =
-                'Connected as: ' + userId;
+        stompClient.connect({}, function onConnect() {
+            connected = true;
+            updateStatus('Connected as: ' + userId, true);
+            document.getElementById('connectBtn').disabled = true;
+            document.getElementById('disconnectBtn').disabled = false;
 
-            console.log(
-                'Connected to websocket as user:',
-                userId
-            );
+            console.log('✓ WebSocket connected for user: ' + userId);
 
-            stompClient.subscribe(
-                '/user/queue/notifications',
-                function (message) {
+            stompClient.subscribe('/user/queue/notifications', function onNotificationReceived(message) {
+                const notification = JSON.parse(message.body);
+                console.log('✓ Notification received:', notification);
+                showNotification(notification);
+            });
 
-                    const notification =
-                        JSON.parse(message.body);
-
-                    console.log(
-                        'Notification received:',
-                        notification
-                    );
-
-                    showNotification(notification);
-
-                    sendAcknowledgement(
-                        notification.eventId,
-                        userId
-                    );
-                }
-            );
+        }, function onError(error) {
+            connected = false;
+            updateStatus('Connection failed: ' + error, false);
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+            console.error('✗ WebSocket error:', error);
         });
     }
 
-    function sendAcknowledgement(eventId, userId) {
+    function disconnect() {
+        if (stompClient !== null) {
+            stompClient.disconnect(function() {
+                connected = false;
+                updateStatus('Status: Disconnected', false);
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+                console.log('✓ WebSocket disconnected');
+            });
+        }
+    }
 
-        const ackPayload = {
-
-            eventId: eventId,
-
-            userId: userId,
-
-            acknowledgedAt:
-                new Date().toISOString()
-        };
-
-        stompClient.send(
-            '/app/ack',
-            {},
-            JSON.stringify(ackPayload)
-        );
-
-        console.log(
-            'ACK sent for event:',
-            eventId
-        );
+    function updateStatus(message, isConnected) {
+        const statusDiv = document.getElementById('status');
+        statusDiv.textContent = message;
+        statusDiv.className = isConnected ? 'status-connected' : 'status-disconnected';
     }
 
     function showNotification(notification) {
+        const notificationsDiv = document.getElementById('notifications');
+        const noNotificationsMsg = document.getElementById('noNotifications');
 
-        const notificationsDiv =
-            document.getElementById('notifications');
+        if (noNotificationsMsg) {
+            noNotificationsMsg.remove();
+        }
 
-        const div =
-            document.createElement('div');
-
+        const div = document.createElement('div');
         div.className = 'notification';
 
+        const timestamp = new Date().toLocaleTimeString();
+
         div.innerHTML = `
-
-            <strong>Event ID:</strong>
-            ${notification.eventId}<br><br>
-
-            <strong>User ID:</strong>
-            ${notification.userId}<br><br>
-
-            <strong>Subject:</strong>
-            ${notification.subject}<br><br>
-
-            <strong>Message:</strong>
-            ${notification.message}<br><br>
-
-            <strong>Channels:</strong>
-            ${notification.channels}<br><br>
-
-            <strong>Created At:</strong>
-            ${notification.createdAt}
-
+            <div class="notification-title">✓ Notification Received</div>
+            <div class="notification-field"><strong>Event ID:</strong> ${escapeHtml(notification.eventId)}</div>
+            <div class="notification-field"><strong>User ID:</strong> ${escapeHtml(notification.userId)}</div>
+            <div class="notification-field"><strong>Event Type:</strong> ${escapeHtml(notification.type)}</div>
+            <div class="notification-field"><strong>Message:</strong> ${escapeHtml(notification.message)}</div>
+            <div class="timestamp">Received at: ${timestamp}</div>
         `;
 
-        notificationsDiv.prepend(div);
+        notificationsDiv.insertBefore(div, notificationsDiv.firstChild);
     }
 
-</script>
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('userId').focus();
+    });
+</script>
 </body>
 </html>

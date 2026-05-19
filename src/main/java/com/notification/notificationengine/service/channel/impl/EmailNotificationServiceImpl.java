@@ -1,121 +1,121 @@
 package com.notification.notificationengine.service.channel.impl;
 
-import com.notification.notificationengine.dto.NotificationEventDto;
-import com.notification.notificationengine.exceptions.InvalidNotificationEventException;
-import com.notification.notificationengine.exceptions.TransientNotificationException;
+import com.notification.notificationengine.model.NotificationEvent;
+import com.notification.notificationengine.model.enums.NotificationChannel;
 import com.notification.notificationengine.service.channel.EmailNotificationService;
+import com.notification.notificationengine.service.persistenceService.NotificationPersistenceServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
-@Slf4j
 @RequiredArgsConstructor
-public class EmailNotificationServiceImpl
-        implements EmailNotificationService {
+@Slf4j
+public class EmailNotificationServiceImpl implements EmailNotificationService {
 
-    private final JavaMailSender javaMailSender;
-
+    private final JavaMailSender mailSender;
+    private final NotificationPersistenceServiceImpl persistenceService;
     @Value("${spring.mail.username}")
     private String fromEmail;
 
     @Override
     @Async
-    public void sendEmail(NotificationEventDto eventDto) {
+    public void deliver(NotificationEvent event) {
 
-        validateEmailEvent(eventDto);
+        String recipientEmail = null;
 
         try {
-            log.info(
-                    "Sending EMAIL notification for event {} to recipient {}",
-                    eventDto.getEventId(),
-                    eventDto.getEmail()
-            );
 
-            SimpleMailMessage mailMessage = buildMailMessage(eventDto);
-            javaMailSender.send(mailMessage);
-            log.info(
-                    "EMAIL notification sent successfully for event {}",
-                    eventDto.getEventId()
-            );
+            recipientEmail = extractEmailFromEvent(event);
 
-        } catch (MailException e) {
-            log.error(
-                    "SMTP failure while sending EMAIL for event {}",
-                    eventDto.getEventId(),
-                    e
-            );
-            throw new TransientNotificationException(
-                    "Temporary SMTP failure for event: "
-                            + eventDto.getEventId(),
-                    e
+            if (recipientEmail == null || recipientEmail.isEmpty()) {
+                throw new IllegalArgumentException("No email address found for user: " + event.getUserId());
+            }
+
+            log.debug("Preparing email delivery - Event: {}, Recipient: {}",
+                    event.getId(), maskEmail(recipientEmail));
+
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(recipientEmail);
+            message.setSubject("[" + event.getEventType() + "] " + buildSubject(event));
+            message.setText(event.getMessage());
+            message.setFrom(fromEmail);
+            mailSender.send(message);
+
+            log.info("✓ Email sent successfully - Event: {}, Recipient: {}",
+                    event.getId(), maskEmail(recipientEmail));
+
+            persistenceService.markChannelDelivered(
+                    event.getId(),
+                    NotificationChannel.EMAIL,
+                    recipientEmail
             );
 
         } catch (Exception e) {
-            log.error(
-                    "Unexpected EMAIL delivery failure for event {}",
-                    eventDto.getEventId(),
+            log.error("✗ Email delivery failed - Event: {}, Recipient: {}, Error: {}",
+                    event.getId(),
+                    maskEmail(recipientEmail),
+                    e.getMessage(),
                     e
             );
-            throw new TransientNotificationException(
-                    "Unexpected email delivery failure for event: "
-                            + eventDto.getEventId(),
-                    e
+
+            String errorCode = categorizeError(e);
+            persistenceService.markChannelFailed(
+                    event.getId(),
+                    NotificationChannel.EMAIL,
+                    e.getMessage(),
+                    errorCode
             );
+
         }
     }
 
-    private void validateEmailEvent(NotificationEventDto eventDto) {
-
-        if (eventDto == null) {
-            throw new InvalidNotificationEventException(
-                    "Notification event cannot be null"
-            );
+    private String extractEmailFromEvent(NotificationEvent event) {
+        if (event.getMetadata() != null && event.getMetadata().has("email")) {
+            return event.getMetadata().get("email").asText();
         }
-        if (eventDto.getEventId() == null) {
-            throw new InvalidNotificationEventException(
-                    "Event ID is missing"
-            );
-        }
-        if (eventDto.getEmail() == null || eventDto.getEmail().isBlank()) {
+        return event.getUserId() + "@example.com";
+    }
 
-            throw new InvalidNotificationEventException(
-                    "Recipient email is missing for event: "
-                            + eventDto.getEventId()
-            );
-        }
-        if (eventDto.getSubject() == null || eventDto.getSubject().isBlank()) {
+    private String buildSubject(NotificationEvent event) {
+        return switch (event.getEventType()) {
+            case "ORDER_CONFIRMED" -> "Order Confirmed";
+            case "ORDER_SHIPPED" -> "Order Shipped";
+            case "DELIVERY_COMPLETE" -> "Delivery Complete";
+            case "PAYMENT_RECEIVED" -> "Payment Received";
+            case "PAYMENT_FAILED" -> "Payment Failed";
+            case "NOTIFICATION_EVENT"->"Notification Received";
+            default -> "Notification";
+        };
+    }
 
-            throw new InvalidNotificationEventException(
-                    "Email subject is missing for event: "
-                            + eventDto.getEventId()
-            );
-        }
-        if (eventDto.getMessage() == null || eventDto.getMessage().isBlank()) {
+    private String categorizeError(Exception e) {
+        String message = e.getMessage().toLowerCase();
 
-            throw new InvalidNotificationEventException(
-                    "Email message body is missing for event: "
-                            + eventDto.getEventId()
-            );
+        if (message.contains("timeout") || message.contains("timed out")) {
+            return "EMAIL_TIMEOUT";
+        } else if (message.contains("invalid") || message.contains("syntax")) {
+            return "EMAIL_INVALID_FORMAT";
+        } else if (message.contains("auth") || message.contains("authentication")) {
+            return "EMAIL_AUTH_FAILED";
+        } else if (message.contains("429") || message.contains("rate")) {
+            return "EMAIL_RATE_LIMITED";
+        } else if (message.contains("5")) {
+            return "EMAIL_SERVER_ERROR";
+        } else {
+            return "EMAIL_UNKNOWN_ERROR";
         }
     }
 
-    private SimpleMailMessage buildMailMessage(
-            NotificationEventDto eventDto
-    ) {
-
-        SimpleMailMessage mailMessage = new SimpleMailMessage();
-
-        mailMessage.setFrom(fromEmail);
-        mailMessage.setTo(eventDto.getEmail());
-        mailMessage.setSubject(eventDto.getSubject());
-        mailMessage.setText(eventDto.getMessage());
-
-        return mailMessage;
+    private String maskEmail(String email) {
+        if (email == null || !email.contains("@")) {
+            return "***";
+        }
+        String[] parts = email.split("@");
+        return parts[0].substring(0, Math.min(3, parts[0].length())) + "@***";
     }
 }
