@@ -58,6 +58,15 @@ public class NotificationLog {
 
     private LocalDateTime lastRetryAt;
 
+
+    /**
+     * PHASE 2: Next time this message should be retried
+     * NULL = ready for immediate retry
+     * Otherwise = wait until this timestamp
+     * Used by RetryWorker to find messages ready to retry
+     */
+    private LocalDateTime nextRetryAt;
+
     @Column(columnDefinition = "TEXT")
     private String failureReason;
 
@@ -102,5 +111,24 @@ public class NotificationLog {
 
     public boolean isTerminal() {
         return status == DeliveryStatus.SENT || status == DeliveryStatus.FAILED;
+    }
+
+    public boolean isReadyForRetry() {
+        if (this.status != DeliveryStatus.RETRYING) {
+            return false;
+        }
+        if (this.nextRetryAt == null) {
+            return true;
+        }
+        return java.time.LocalDateTime.now().isAfter(this.nextRetryAt);
+    }
+
+    public Long getNextBackoffSeconds() {
+        return switch (this.retryCount) {
+            case 0 -> 5L;
+            case 1 -> 30L;
+            case 2 -> 120L;
+            default -> null;
+        };
     }
 }

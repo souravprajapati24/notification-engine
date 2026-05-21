@@ -6,6 +6,7 @@ import com.notification.notificationengine.model.enums.NotificationChannel;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -66,6 +67,31 @@ public interface NotificationLogRepository extends JpaRepository<NotificationLog
         GROUP BY nl.channel
     """)
     List<Object[]> countFailuresByChannel();
+
+    @Query("""
+    SELECT nl FROM NotificationLog nl
+    WHERE nl.status = 'RETRYING'
+    AND (nl.nextRetryAt IS NULL OR nl.nextRetryAt <= CURRENT_TIMESTAMP)
+    ORDER BY nl.nextRetryAt ASC NULLS FIRST
+""")
+    Page<NotificationLog> findReadyForRetry(Pageable pageable);
+
+    @Query("""
+    SELECT nl.retryCount, COUNT(nl) as count FROM NotificationLog nl
+    WHERE nl.status IN ('RETRYING', 'FAILED')
+    GROUP BY nl.retryCount
+    ORDER BY nl.retryCount ASC
+""")
+    List<Object[]> getRetryCountDistribution();
+
+    @Modifying
+    @Query("""
+    UPDATE NotificationLog nl
+    SET nl.status = 'PENDING', nl.nextRetryAt = NULL
+    WHERE nl.id = :logId
+""")
+    void resetLogToPending(@Param("logId") UUID logId);
+
 
     boolean existsByEventId(UUID eventId);
 

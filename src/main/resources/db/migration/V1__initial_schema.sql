@@ -1,5 +1,5 @@
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS notification_events (
                                                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

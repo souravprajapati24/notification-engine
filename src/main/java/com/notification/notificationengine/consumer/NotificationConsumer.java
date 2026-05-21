@@ -1,6 +1,7 @@
 package com.notification.notificationengine.consumer;
 
 
+import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.notification.notificationengine.model.NotificationEvent;
 import com.notification.notificationengine.router.NotificationRouter;
@@ -61,8 +62,7 @@ public class NotificationConsumer {
                     topic,
                     offset
             );
-
-        } catch (com.fasterxml.jackson.core.JsonParseException e) {
+        } catch (JsonParseException e) {
             log.error("JSON parsing failed for message - Reason: {}", e.getMessage());
             throw new RuntimeException("Failed to parse notification event from Kafka", e);
 

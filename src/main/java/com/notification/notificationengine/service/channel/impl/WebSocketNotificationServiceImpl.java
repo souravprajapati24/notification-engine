@@ -1,6 +1,5 @@
 package com.notification.notificationengine.service.channel.impl;
 
-
 import com.notification.notificationengine.model.NotificationEvent;
 import com.notification.notificationengine.model.enums.NotificationChannel;
 import com.notification.notificationengine.service.channel.WebSocketNotificationService;
@@ -24,10 +23,9 @@ public class WebSocketNotificationServiceImpl implements WebSocketNotificationSe
     @Async
     @Override
     public void deliver(NotificationEvent event) {
-        String userId = null;
 
         try {
-            userId = event.getUserId();
+           String userId = event.getUserId();
 
             if (userId == null || userId.isBlank()) {
                 throw new IllegalArgumentException("Missing userId for event: " + event.getId());
@@ -57,23 +55,50 @@ public class WebSocketNotificationServiceImpl implements WebSocketNotificationSe
                     "/queue/notifications"
             );
 
-        } catch (Exception e) {
-            log.warn("⚠ WebSocket delivery failed - Event: {}, User: {}, Error: {}",
-                    event.getId(),
-                    userId,
-                    e.getMessage()
-            );
+        }  catch (Exception e) {
 
             String errorCode = categorizeError(e);
-            persistenceService.markChannelFailed(
-                    event.getId(),
-                    NotificationChannel.WEBSOCKET,
-                    e.getMessage(),
-                    errorCode
-            );
+            if (persistenceService.isRetriable(errorCode)) {
+
+                boolean retryScheduled = persistenceService.markChannelForRetry(
+                        event.getId(),
+                        NotificationChannel.WEBSOCKET,
+                        e.getMessage(),
+                        errorCode
+                );
+
+                if (retryScheduled) {
+                    log.warn(
+                            "⟳ WebSocket delivery retriable error - Event: {}, Error: {}, Will retry",
+                            event.getId(),
+                            errorCode
+                    );
+
+                } else {
+                    log.error(
+                            "✗ WebSocket delivery permanently failed after retries exhausted - Event: {}, Error: {}",
+                            event.getId(),
+                            errorCode
+                    );
+                }
+
+            } else {
+                persistenceService.markChannelFailed(
+                        event.getId(),
+                        NotificationChannel.WEBSOCKET,
+                        e.getMessage(),
+                        errorCode
+                );
+                log.error(
+                        "✗ WebSocket delivery failed permanently - Event: {}, Error: {}",
+                        event.getId(),
+                        errorCode
+                );
+            }
         }
     }
 
+    @Override
     public void sendDirectMessage(String userId, String messageType, Map<String, Object> payload) {
         try {
             Map<String, Object> wsMessage = Map.of(
@@ -86,10 +111,11 @@ public class WebSocketNotificationServiceImpl implements WebSocketNotificationSe
             log.debug("Direct WebSocket message sent - User: {}, Type: {}", userId, messageType);
 
         } catch (Exception e) {
-            log.debug("Failed to send direct message to user {} - Error: {}", userId, e.getMessage());
+            log.warn("Failed to send direct message to user {} - Error: {}", userId, e.getMessage());
         }
     }
 
+    @Override
     public void broadcast(String messageType, Map<String, Object> payload) {
         try {
             Map<String, Object> wsMessage = Map.of(
@@ -102,7 +128,11 @@ public class WebSocketNotificationServiceImpl implements WebSocketNotificationSe
             log.info("Broadcast WebSocket message sent - Type: {}", messageType);
 
         } catch (Exception e) {
-            log.error("Failed to broadcast - Error: {}", e.getMessage());
+            log.error(
+                    "Failed to broadcast WebSocket message - Error: {}",
+                    e.getMessage(),
+                    e
+            );
         }
     }
 
@@ -114,13 +144,13 @@ public class WebSocketNotificationServiceImpl implements WebSocketNotificationSe
 
         if (msg.contains("not connected") || msg.contains("offline")) {
             return "WS_NO_SESSION";
-        } else if (msg.contains("closed")) {
+        } else if (msg.contains("connection closed") || msg.contains("session closed")) {
             return "WS_CONNECTION_CLOSED";
         } else if (msg.contains("size") || msg.contains("large")) {
             return "WS_MESSAGE_TOO_LARGE";
         } else if (msg.contains("timeout")) {
             return "WS_TIMEOUT";
-        } else if (msg.contains("user") || msg.contains("userid")) {
+        } else if (msg.contains("user not found") || msg.contains("invalid user") || msg.contains("userid")) {
             return "WS_INVALID_USER";
         } else {
             return "WS_UNKNOWN_ERROR";

@@ -1,5 +1,4 @@
 package com.notification.notificationengine.service.channel.impl;
-
 import com.notification.notificationengine.model.NotificationEvent;
 import com.notification.notificationengine.model.enums.NotificationChannel;
 import com.notification.notificationengine.service.channel.EmailNotificationService;
@@ -46,7 +45,7 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
             message.setFrom(fromEmail);
             mailSender.send(message);
 
-            log.info("✓ Email sent successfully - Event: {}, Recipient: {}",
+            log.info("Email sent successfully - Event: {}, Recipient: {}",
                     event.getId(), maskEmail(recipientEmail));
 
             persistenceService.markChannelDelivered(
@@ -55,22 +54,48 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
                     recipientEmail
             );
 
-        } catch (Exception e) {
-            log.error("✗ Email delivery failed - Event: {}, Recipient: {}, Error: {}",
-                    event.getId(),
-                    maskEmail(recipientEmail),
-                    e.getMessage(),
-                    e
-            );
-
+        }catch (Exception e) {
             String errorCode = categorizeError(e);
-            persistenceService.markChannelFailed(
-                    event.getId(),
-                    NotificationChannel.EMAIL,
-                    e.getMessage(),
-                    errorCode
-            );
 
+            if (persistenceService.isRetriable(errorCode)) {
+
+                boolean retrySchedule = persistenceService.markChannelForRetry(
+                        event.getId(),
+                        NotificationChannel.EMAIL,
+                        e.getMessage(),
+                        errorCode
+                );
+
+                if(retrySchedule){
+                    log.warn("⟳ Email delivery retriable error - Event: {}, Error: {}, Will retry",
+                            event.getId(), errorCode);
+
+                }
+                else {
+
+                    log.error(
+                            "✗ Email delivery permanently failed after retries exhausted - Event: {}, Error: {}",
+                            event.getId(),
+                            errorCode
+                    );
+                }
+
+            }
+            else {
+
+                persistenceService.markChannelFailed(
+                        event.getId(),
+                        NotificationChannel.EMAIL,
+                        e.getMessage(),
+                        errorCode
+                );
+
+                log.error(
+                        "✗ Email delivery failed permanently - Event: {}, Error: {}",
+                        event.getId(),
+                        errorCode
+                );
+            }
         }
     }
 

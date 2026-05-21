@@ -10,6 +10,8 @@ import com.notification.notificationengine.repository.NotificationEventRepositor
 import com.notification.notificationengine.repository.NotificationLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -96,7 +98,6 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
                 log.debug("Created log entry for event {} channel {}", eventId, channel);
 
             }
-
             log.info(
                     "✓ Created {} delivery logs for event {}",
                     channels.size(),
@@ -143,7 +144,6 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
                 );
                 updateEventStatus(eventId);
             } else {
-
                 log.warn(
                         "⚠ No PENDING log entry for event {} channel {} - possibly already processed",
                         eventId,
@@ -173,7 +173,6 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
             String failureCode
     ) {
         try {
-
             var logEntry = logRepository.findByEventIdAndChannelAndStatus(
                     eventId,
                     channel,
@@ -186,7 +185,6 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
                 logg.setFailureReason(failureReason);
                 logg.setFailureCode(failureCode);
                 logRepository.save(logg);
-
 
                 log.warn(
                         "✗ Delivery failed - Event: {}, Channel: {}, Code: {}, Reason: {}",
@@ -214,6 +212,102 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
             );
             throw new RuntimeException("Failed to update delivery failure status", e);
         }
+    }
+
+    @Transactional
+    @Override
+    public boolean markChannelForRetry(
+            UUID eventId,
+            NotificationChannel channel,
+            String failureReason,
+            String failureCode
+    ) {
+        try {
+            var logEntry = logRepository.findByEventIdAndChannelAndStatus(
+                    eventId,
+                    channel,
+                    DeliveryStatus.RETRYING
+            ).or(() -> logRepository.findByEventIdAndChannelAndStatus(
+                    eventId,
+                    channel,
+                    DeliveryStatus.PENDING
+            ));
+
+            if (logEntry.isPresent()) {
+                NotificationLog logg = logEntry.get();
+
+                logg.setRetryCount(logg.getRetryCount() + 1);
+                logg.setFailureReason(failureReason);
+                logg.setFailureCode(failureCode);
+                logg.setLastRetryAt(LocalDateTime.now());
+
+                Long backoffSeconds = getBackoffInterval(logg.getRetryCount());
+
+                if (backoffSeconds == null) {
+                    logg.setStatus(DeliveryStatus.FAILED);
+                    log.warn(
+                            "✗ Max retries exhausted - Event: {}, Channel: {}, Total attempts: {}",
+                            eventId, channel, logg.getRetryCount()
+                    );
+                    logRepository.save(logg);
+                    return false;
+
+                } else {
+                    logg.setStatus(DeliveryStatus.RETRYING);
+                    LocalDateTime nextRetry = LocalDateTime.now().plusSeconds(backoffSeconds);
+                    logg.setNextRetryAt(nextRetry);
+
+                    log.info(
+                            "⟳ Scheduled for retry - Event: {}, Channel: {}, Attempt: {}, Wait: {}s, NextRetry: {}",
+                            eventId, channel, logg.getRetryCount(), backoffSeconds, nextRetry
+                    );
+                    logRepository.save(logg);
+                    return true;
+                }
+
+            }
+
+            return false;
+
+        } catch (Exception e) {
+            log.error(
+                    "✗ Failed to mark channel for retry - Event: {}, Channel: {}, Error: {}",
+                    eventId, channel, e.getMessage(), e
+            );
+            throw new RuntimeException("Failed to schedule retry", e);
+        }
+    }
+
+    private Long getBackoffInterval(int retryCount) {
+        return switch (retryCount) {
+            case 0 -> 5L;       // 5 seconds for attempt 1
+            case 1 -> 30L;      // 30 seconds for attempt 2
+            case 2 -> 120L;     // 120 seconds for attempt 3
+            default -> null;    // No more retries
+        };
+    }
+
+    @Override
+    public boolean isRetriable(String failureCode) {
+        if (failureCode == null) return true; // Default: retry unknown errors
+
+        return switch (failureCode) {
+            case "EMAIL_TIMEOUT", "SMS_TIMEOUT", "WS_TIMEOUT" -> true;
+            case "EMAIL_CONNECTION_ERROR", "SMS_CONNECTION_ERROR", "WS_CONNECTION_ERROR" -> true;
+            case "EMAIL_SERVER_ERROR", "SMS_TWILIO_INTERNAL_ERROR" -> true;
+            case "EMAIL_RATE_LIMITED", "SMS_RATE_LIMITED" -> true;
+
+            case "EMAIL_INVALID_FORMAT", "SMS_INVALID_RECIPIENT", "WS_INVALID_USER" -> false;
+            case "EMAIL_AUTH_FAILED", "SMS_AUTH_FAILED" -> false;
+
+            default -> true;
+        };
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public Page<NotificationLog> findReadyForRetry(Pageable pageable) {
+        return logRepository.findReadyForRetry(pageable);
     }
 
     @Override
