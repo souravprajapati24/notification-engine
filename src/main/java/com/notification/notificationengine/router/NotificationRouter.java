@@ -7,7 +7,6 @@ import com.notification.notificationengine.model.enums.NotificationChannel;
 import com.notification.notificationengine.service.channel.EmailNotificationService;
 import com.notification.notificationengine.service.channel.SmsNotificationService;
 import com.notification.notificationengine.service.channel.WebSocketNotificationService;
-import com.notification.notificationengine.service.persistenceService.NotificationPersistenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

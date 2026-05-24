@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.notification.notificationengine.model.NotificationEvent;
 import com.notification.notificationengine.router.NotificationRouter;
+import com.notification.notificationengine.service.idempotency.IdempotencyService;
 import com.notification.notificationengine.service.persistenceService.NotificationPersistenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
 
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -23,6 +25,7 @@ public class NotificationConsumer {
 
     private final NotificationRouter router;
     private final NotificationPersistenceService persistenceService;
+    private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(
@@ -50,8 +53,24 @@ public class NotificationConsumer {
                     event.getChannels()
             );
 
+            log.info("Event ID before persistence: {}", event.getId());
+            String idempotencyKey = NotificationEvent.generateIdempotencyKey(event.getId());
+            event.setIdempotencyKey(idempotencyKey);
 
+            log.debug("Idempotency key generated - EventId: {}, Key: {}",
+                    event.getId(), idempotencyKey);
+
+            if (idempotencyService.isAlreadyProcessed(idempotencyKey)) {
+                log.warn(
+                        "⚠ Duplicate message skipped - EventId: {}, Key: {}, Topic: {}, Offset: {}",
+                        event.getId(), idempotencyKey, topic, offset
+                );
+
+                ack.acknowledge();
+                return;
+            }
             NotificationEvent savedEvent = persistenceService.persistEventLogs(event);
+
             router.route(savedEvent);
 
             log.debug("Event routed to delivery services - ID: {}", savedEvent.getId());

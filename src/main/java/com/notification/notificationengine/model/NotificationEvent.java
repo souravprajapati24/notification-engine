@@ -27,7 +27,6 @@ import java.util.UUID;
 @Builder
 public class NotificationEvent {
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(nullable = false, length = 100)
@@ -60,6 +59,13 @@ public class NotificationEvent {
     private LocalDateTime createdAt;
 
     private LocalDateTime processedAt;
+
+    @Column(nullable = false, unique = true, length = 36)
+    private String idempotencyKey;
+
+    public static String generateIdempotencyKey(UUID eventId) {
+        return eventId.toString();
+    }
 
 
     @Column(nullable = false)

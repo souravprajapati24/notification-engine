@@ -25,13 +25,13 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
     @Async
     public void deliver(NotificationEvent event) {
 
-        String recipientEmail = null;
+
 
         try {
 
-            recipientEmail = extractEmailFromEvent(event);
+            String recipientEmail = extractEmailFromEvent(event);
 
-            if (recipientEmail == null || recipientEmail.isEmpty()) {
+            if (recipientEmail.isEmpty()) {
                 throw new IllegalArgumentException("No email address found for user: " + event.getUserId());
             }
 
@@ -101,9 +101,19 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
 
     private String extractEmailFromEvent(NotificationEvent event) {
         if (event.getMetadata() != null && event.getMetadata().has("email")) {
-            return event.getMetadata().get("email").asText();
+
+            String email = event.getMetadata()
+                    .get("email")
+                    .asText();
+
+            if (email != null && !email.isBlank()) {
+                return email;
+            }
         }
-        return event.getUserId() + "@example.com";
+
+        throw new IllegalArgumentException(
+                "Recipient email missing for event: " + event.getId()
+        );
     }
 
     private String buildSubject(NotificationEvent event) {
@@ -119,7 +129,12 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
     }
 
     private String categorizeError(Exception e) {
-        String message = e.getMessage().toLowerCase();
+
+        String message = e.getMessage();
+        if (message == null) {
+            return "EMAIL_UNKNOWN_ERROR";
+        }
+        message = message.toLowerCase();
 
         if (message.contains("timeout") || message.contains("timed out")) {
             return "EMAIL_TIMEOUT";

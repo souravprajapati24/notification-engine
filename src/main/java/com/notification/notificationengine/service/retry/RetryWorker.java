@@ -9,16 +9,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-
-/**
- * PHASE 2: Retry Worker Service
- *
- * Periodically scans for RETRYING messages that are ready to retry
- * (where next_retry_at <= current_time)
- *
- * Runs every 10 seconds to find and reattempt failed deliveries
- * Uses exponential backoff: 5s → 30s → 120s
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -26,16 +16,12 @@ public class RetryWorker {
 
     private final NotificationLogRepository logRepository;
     private final RetryExecutionService retryExecutionService;
-    /**
-     * Run every 10 seconds to retry failed messages
-     * Batch size: 100 messages at a time to avoid overload
-     */
-    @Scheduled(fixedDelay = 10000, initialDelay = 10000)
+
+    @Scheduled(fixedDelay = 30000, initialDelay = 5000)
     public void retryFailedMessages() {
         try {
             log.debug("▼ Retry worker started - scanning for messages ready to retry...");
 
-            // Find all RETRYING messages where next_retry_at <= now
             Page<NotificationLog> readyForRetry = logRepository.findReadyForRetry(
                     PageRequest.of(0, 100)
             );
@@ -51,7 +37,6 @@ public class RetryWorker {
                     readyForRetry.getTotalPages()
             );
 
-            // Process each message ready for retry
             for (NotificationLog logg : readyForRetry.getContent()) {
 
                 try {
@@ -67,7 +52,6 @@ public class RetryWorker {
                 }
             }
 
-            // If there are more pages, schedule them for next cycle
             if (readyForRetry.hasNext()) {
                 log.info(
                         "⟳ {} more messages queued for retry in next cycle",

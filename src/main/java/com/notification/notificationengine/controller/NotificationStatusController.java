@@ -5,6 +5,7 @@ import com.notification.notificationengine.model.NotificationLog;
 import com.notification.notificationengine.model.enums.DeliveryStatus;
 import com.notification.notificationengine.repository.NotificationEventRepository;
 import com.notification.notificationengine.repository.NotificationLogRepository;
+import com.notification.notificationengine.service.idempotency.IdempotencyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -26,6 +27,7 @@ public class NotificationStatusController {
 
     private final NotificationEventRepository eventRepository;
     private final NotificationLogRepository logRepository;
+    private final IdempotencyService idempotencyService;
 
     @GetMapping("/{userId}")
     public ResponseEntity<Map<String, Object>> getUserNotificationHistory(
@@ -237,6 +239,61 @@ public class NotificationStatusController {
                     .body(Map.of("error", "Failed to fetch user history"));
         }
     }
+
+    @GetMapping("/check-duplicate/{idempotencyKey}")
+    public ResponseEntity<Map<String, Object>> checkDuplicate(
+            @PathVariable String idempotencyKey
+    ) {
+        try {
+            boolean isProcessed = idempotencyService.isAlreadyProcessed(idempotencyKey);
+
+            if (isProcessed) {
+                var previousEvent = idempotencyService.getPreviouslyProcessed(idempotencyKey);
+
+                return ResponseEntity.ok(Map.of(
+                        "isDuplicate", true,
+                        "alreadyProcessed", true,
+                        "previousEventId", previousEvent.map(NotificationEvent::getId).orElse(null),
+                        "idempotencyKey", idempotencyKey,
+                        "message", "This message (eventId) was already processed before"
+                ));
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "isDuplicate", false,
+                    "alreadyProcessed", false,
+                    "idempotencyKey", idempotencyKey,
+                    "message", "This is a new message (not yet processed)"
+            ));
+
+        } catch (Exception e) {
+            log.error("Error checking duplicate: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to check duplicate status"));
+        }
+    }
+
+    @GetMapping("/idempotency-stats")
+    public ResponseEntity<Map<String, Object>> getIdempotencyStats() {
+        try {
+            long totalProcessed = idempotencyService.getProcessedCount();
+            long uniqueKeys = eventRepository.count(); // Each event has unique key
+
+            return ResponseEntity.ok(Map.of(
+                    "totalProcessed", totalProcessed,
+                    "uniqueIdempotencyKeys", uniqueKeys,
+                    "duplicateDetectionStatus", "ACTIVE (using eventId-based keys)",
+                    "keyFormat", "UUID (stable, deterministic)"
+            ));
+
+        } catch (Exception e) {
+            log.error("Error fetching idempotency stats: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to fetch statistics"));
+        }
+    }
+
+
 
     private Map<String, Long> calculateLatencies(List<NotificationLog> logs) {
         Map<String, Long> latencies = new HashMap<>();

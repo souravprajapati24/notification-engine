@@ -92,7 +92,8 @@ logging:
     org.springframework.data: INFO
     org.springframework.web: INFO
     org.hibernate: INFO
-    org.hibernate.SQL: DEBUG
+    org.hibernate.SQL: warn
+    org.hibernate.orm.jdbc.bind: WARN
     org.postgresql: WARN
     org.apache.kafka: WARN
 
@@ -124,6 +125,10 @@ app:
   kafka:
     topics:
       notification-events: notification-event
+      notification-events-dlt: notification-event.DLT
+
+  alerts:
+    ops-email: ${ALERTS_OPS_EMAIL}
 
 twilio:
   account-sid: ${TWILIO_ACCOUNT_SID}

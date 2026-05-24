@@ -19,17 +19,12 @@ public class RetryExecutionService {
     private final NotificationEventRepository eventRepository;
     private final NotificationRouter router;
 
-    /**
-     * Attempt delivery for a single RETRYING message
-     * Fetches the original event and routes it again
-     */
 
     @Transactional
     public void retryDelivery(NotificationLog retryLog) {
         try {
             UUID eventId = retryLog.getEventId();
 
-            // Fetch original event
             var event = eventRepository.findById(eventId);
 
             if (event.isEmpty()) {
@@ -46,11 +41,8 @@ public class RetryExecutionService {
                     retryLog.getRetryCount()
             );
 
-            // Create a copy of the event with only this channel
             NotificationEvent eventForChannel = getNotificationEvent(retryLog, originalEvent);
 
-
-            // Route to delivery service for this channel only
             switch (retryLog.getChannel()) {
                 case EMAIL:
                     log.debug("Retrying EMAIL delivery for event {}", eventId);
@@ -65,7 +57,6 @@ public class RetryExecutionService {
                     log.warn("⚠ Unknown channel for retry: {}", retryLog.getChannel());
             }
 
-            // Route the event (will trigger the service)
             router.route(eventForChannel);
 
         } catch (Exception e) {

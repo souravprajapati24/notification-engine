@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -29,6 +31,7 @@ public class NotificationProducer {
             );
 
             NotificationEvent event = NotificationEvent.builder()
+                    .id(UUID.randomUUID())
                     .userId(eventDto.getUserId())
                     .eventType(eventDto.getEventType())
                     .message(eventDto.getMessage())

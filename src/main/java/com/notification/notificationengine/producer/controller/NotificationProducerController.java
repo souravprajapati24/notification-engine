@@ -29,10 +29,8 @@ public class NotificationProducerController {
                     eventDto.getEventType()
             );
 
-            // Publish to Kafka
             notificationProducer.publishEvent(eventDto);
 
-            // Return success response
             return ResponseEntity.accepted().body(Map.of(
                     "status", "SUCCESS",
                     "message", "Notification published successfully",

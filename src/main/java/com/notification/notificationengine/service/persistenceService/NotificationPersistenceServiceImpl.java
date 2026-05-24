@@ -1,6 +1,9 @@
 package com.notification.notificationengine.service.persistenceService;
 
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.notification.notificationengine.dto.DltMessagePayloadDto;
 import com.notification.notificationengine.model.NotificationEvent;
 import com.notification.notificationengine.model.NotificationLog;
 import com.notification.notificationengine.model.enums.DeliveryStatus;
@@ -10,8 +13,10 @@ import com.notification.notificationengine.repository.NotificationEventRepositor
 import com.notification.notificationengine.repository.NotificationLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +31,11 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
 
     private final NotificationEventRepository eventRepository;
     private final NotificationLogRepository logRepository;
+    private final KafkaTemplate<String , String> kafkaTemplate;
+    private final ObjectMapper objectMapper;
+
+    @Value("${app.kafka.topics.notification-events}.DLT")
+    private  String dltTopic;
 
     @Override
     @Transactional
@@ -249,7 +259,16 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
                             "✗ Max retries exhausted - Event: {}, Channel: {}, Total attempts: {}",
                             eventId, channel, logg.getRetryCount()
                     );
+
                     logRepository.save(logg);
+                    updateEventStatus(eventId);
+
+                    sendToDlt(
+                            eventId,
+                            channel,
+                            failureReason,
+                            failureCode
+                    );
                     return false;
 
                 } else {
@@ -278,29 +297,113 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
         }
     }
 
-    private Long getBackoffInterval(int retryCount) {
+
+    private void sendToDlt(
+            UUID eventId,
+            NotificationChannel channel,
+            String failureReason,
+            String failureCode
+    ) {
+        try {
+
+            var eventOpt = eventRepository.findById(eventId);
+            if (eventOpt.isEmpty()) {
+                log.warn("Event not found for DLT - EventId: {}", eventId);
+                return;
+            }
+
+            NotificationEvent notifEvent = eventOpt.get();
+
+            var logEntry = logRepository.findByEventIdAndChannelAndStatus(
+                    eventId,
+                    channel,
+                    DeliveryStatus.FAILED
+            );
+
+            DltMessagePayloadDto payload = DltMessagePayloadDto.builder()
+                    .eventId(eventId)
+                    .userId(notifEvent.getUserId())
+                    .channel(channel.toString())
+                    .failureCode(failureCode)
+                    .failureReason(failureReason)
+                    .retryCount(logEntry.map(NotificationLog::getRetryCount).orElse(0))
+                    .failedAt(LocalDateTime.now())
+                    .eventType(notifEvent.getEventType())
+                    .message(notifEvent.getMessage())
+                    .build();
+
+            String dltMessage = objectMapper.writeValueAsString(payload);
+
+            kafkaTemplate.send(dltTopic, eventId.toString(), dltMessage).get();
+
+            log.error(
+                    "→ Message sent to DLT - Topic: {}, EventId: {}, Channel: {}, Code: {}",
+                    dltTopic, eventId, channel, failureCode
+            );
+
+        } catch (JsonProcessingException e) {
+            log.error(
+                    "⚠ Failed to serialize DLT message - EventId: {}, Error: {}",
+                    eventId, e.getMessage()
+            );
+        } catch (Exception e) {
+            log.error(
+                    "⚠ Failed to send message to DLT - EventId: {}, Error: {}",
+                    eventId, e.getMessage()
+            );
+        }
+    }
+
+private Long getBackoffInterval(int retryCount) {
         return switch (retryCount) {
-            case 0 -> 5L;       // 5 seconds for attempt 1
-            case 1 -> 30L;      // 30 seconds for attempt 2
-            case 2 -> 120L;     // 120 seconds for attempt 3
-            default -> null;    // No more retries
+            case 0 -> 5L;
+            case 1 -> 30L;
+            case 2 -> 120L;
+            default -> null;
         };
     }
 
     @Override
     public boolean isRetriable(String failureCode) {
-        if (failureCode == null) return true; // Default: retry unknown errors
+
+        if (failureCode == null) {
+            return false;
+        }
 
         return switch (failureCode) {
-            case "EMAIL_TIMEOUT", "SMS_TIMEOUT", "WS_TIMEOUT" -> true;
-            case "EMAIL_CONNECTION_ERROR", "SMS_CONNECTION_ERROR", "WS_CONNECTION_ERROR" -> true;
-            case "EMAIL_SERVER_ERROR", "SMS_TWILIO_INTERNAL_ERROR" -> true;
-            case "EMAIL_RATE_LIMITED", "SMS_RATE_LIMITED" -> true;
 
-            case "EMAIL_INVALID_FORMAT", "SMS_INVALID_RECIPIENT", "WS_INVALID_USER" -> false;
-            case "EMAIL_AUTH_FAILED", "SMS_AUTH_FAILED" -> false;
+            case "EMAIL_TIMEOUT",
+                 "EMAIL_CONNECTION_ERROR",
+                 "EMAIL_TEMPORARY_FAILURE",
+                 "EMAIL_RATE_LIMITED" -> true;
 
-            default -> true;
+            case "EMAIL_INVALID_RECIPIENT",
+                 "EMAIL_INVALID_FORMAT",
+                 "EMAIL_AUTH_FAILED",
+                 "EMAIL_UNKNOWN_ERROR" -> false;
+
+            case "SMS_TIMEOUT",
+                 "SMS_CONNECTION_ERROR",
+                 "SMS_NETWORK_ERROR",
+                 "SMS_RATE_LIMITED",
+                 "SMS_TWILIO_INTERNAL_ERROR" -> true;
+
+            case "SMS_INVALID_RECIPIENT",
+                 "SMS_INVALID_MESSAGE",
+                 "SMS_AUTH_FAILED",
+                 "SMS_CREDENTIALS_ERROR",
+                 "SMS_UNKNOWN_ERROR" -> false;
+
+            case "WS_TIMEOUT",
+                 "WS_CONNECTION_ERROR",
+                 "WS_CONNECTION_CLOSED" -> true;
+
+            case "WS_NO_SESSION",
+                 "WS_INVALID_USER",
+                 "WS_MESSAGE_TOO_LARGE",
+                 "WS_UNKNOWN_ERROR" -> false;
+
+            default -> false;
         };
     }
 

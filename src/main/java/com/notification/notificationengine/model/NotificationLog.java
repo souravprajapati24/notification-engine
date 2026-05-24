@@ -58,13 +58,6 @@ public class NotificationLog {
 
     private LocalDateTime lastRetryAt;
 
-
-    /**
-     * PHASE 2: Next time this message should be retried
-     * NULL = ready for immediate retry
-     * Otherwise = wait until this timestamp
-     * Used by RetryWorker to find messages ready to retry
-     */
     private LocalDateTime nextRetryAt;
 
     @Column(columnDefinition = "TEXT")

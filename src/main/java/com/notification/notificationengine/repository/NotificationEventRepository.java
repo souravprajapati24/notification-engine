@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -32,7 +33,7 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
     long countByStatus(EventStatus status);
 
     @Query("""
-        SELECT ne FROM NotificationEvent ne 
+        SELECT ne FROM NotificationEvent ne
         WHERE ne.createdAt BETWEEN :startTime AND :endTime
         ORDER BY ne.createdAt DESC
     """)
@@ -43,4 +44,10 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
     );
 
     Optional<NotificationEvent> findById(UUID id);
+
+    boolean existsByIdempotencyKey(String idempotencyKey);
+
+    Optional<NotificationEvent> findByIdempotencyKey(String idempotencyKey);
+
+    List<NotificationEvent> findByIdempotencyKeyStartingWith(String prefix);
 }
