@@ -44,6 +44,13 @@ public interface NotificationPersistenceService {
             String failureCode
     );
 
+    void sendToDlt(
+            UUID eventId,
+            NotificationChannel channel,
+            String failureReason,
+            String failureCode
+    );
+
     boolean isRetriable(String failureCode);
 
     @Transactional(readOnly = true)

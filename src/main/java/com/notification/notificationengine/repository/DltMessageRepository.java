@@ -15,18 +15,10 @@ public interface DltMessageRepository extends JpaRepository<DltMessage, UUID> {
 
     Page<DltMessage> findByProcessedFalseOrderByCreatedAtDesc(Pageable pageable);
 
-    Page<DltMessage> findByTopicOrderByCreatedAtDesc(String topic, Pageable pageable);
 
     long countByProcessedFalse();
 
     Page<DltMessage> findByFailureCodeOrderByCreatedAtDesc(String failureCode, Pageable pageable);
-
-    @Query("""
-        SELECT dm.topic, COUNT(dm) as count FROM DltMessage dm
-        GROUP BY dm.topic
-        ORDER BY count DESC
-    """)
-    List<Object[]> countByTopic();
 
     @Query("""
         SELECT dm.failureCode, COUNT(dm) as count FROM DltMessage dm
@@ -36,5 +28,5 @@ public interface DltMessageRepository extends JpaRepository<DltMessage, UUID> {
     """)
     List<Object[]> countByFailureCode();
 
-    boolean existsByTopicAndPartitionAndKafkaOffset(String topic, int partition, long offset);
+    boolean existsByEventIdAndChannel(UUID eventId, String channel);
 }

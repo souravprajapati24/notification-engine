@@ -12,8 +12,6 @@ import org.springframework.kafka.config.KafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
-import org.springframework.kafka.listener.DefaultErrorHandler;
-import org.springframework.util.backoff.ExponentialBackOff;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -60,31 +58,11 @@ public class KafkaConsumerConfig {
 
         factory.setConcurrency(3);
 
-        factory.setCommonErrorHandler(kafkaErrorHandler());
-
         factory.getContainerProperties().setAckMode(
                 org.springframework.kafka.listener.ContainerProperties.AckMode.MANUAL
         );
 
         return factory;
     }
-    @Bean
-    public DefaultErrorHandler kafkaErrorHandler() {
 
-        ExponentialBackOff backOff = new ExponentialBackOff();
-        backOff.setInitialInterval(5000L);
-        backOff.setMultiplier(6.0);
-        backOff.setMaxInterval(120000L);
-        backOff.setMaxElapsedTime(160000L);
-
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(backOff);
-
-        errorHandler.addNotRetryableExceptions(
-                com.fasterxml.jackson.core.JsonParseException.class,
-                IllegalArgumentException.class,
-                NullPointerException.class
-        );
-
-        return errorHandler;
-    }
 }

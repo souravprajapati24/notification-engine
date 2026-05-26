@@ -123,7 +123,7 @@ GROUP BY DATE(nl.created_at), nl.channel, nl.status;
 CREATE INDEX idx_summary_date_channel
     ON notification_delivery_summary(delivery_date, channel);
 
--- Comment for documentation
+
 COMMENT ON MATERIALIZED VIEW notification_delivery_summary IS
     'Pre-computed delivery statistics by date, channel, and status. Used for fast dashboard queries. Refresh periodically (Phase 8).';
 

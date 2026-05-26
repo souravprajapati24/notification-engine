@@ -91,6 +91,12 @@ public class SmsNotificationServiceImpl implements SmsNotificationService {
                         e.getMessage(),
                         errorCode
                 );
+                persistenceService.sendToDlt(
+                        event.getId(),
+                        NotificationChannel.SMS,
+                        e.getMessage(),
+                        errorCode
+                );
                 log.error(
                         "✗ SMS delivery failed permanently - Event: {}, Error: {}",
                         event.getId(),

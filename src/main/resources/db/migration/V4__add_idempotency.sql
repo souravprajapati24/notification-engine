@@ -8,4 +8,4 @@ CREATE INDEX IF NOT EXISTS idx_idempotency_key
     ON notification_events(idempotency_key);
 
 COMMENT ON COLUMN notification_events.idempotency_key IS
-'PHASE 4: Unique idempotency key for deduplication. Uses eventId (UUID) to ensure deterministic behavior across Kafka replays, retries, and consumer restarts. Format: UUID string (e.g., 550e8400-e29b-41d4-a716-446655440000)';
+'Unique idempotency key for deduplication. Uses eventId (UUID) to ensure deterministic behavior across Kafka replays, retries, and consumer restarts. Format: UUID string (e.g., 550e8400-e29b-41d4-a716-446655440000)';

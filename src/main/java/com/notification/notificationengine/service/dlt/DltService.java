@@ -5,7 +5,6 @@ import com.notification.notificationengine.model.DltMessage;
 import com.notification.notificationengine.repository.DltMessageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,41 +19,33 @@ public class DltService {
     private final DltMessageRepository dltRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
 
+
     @Transactional
-    public void logDltMessage(
-            ConsumerRecord<String, String> record,
-            DltMessagePayloadDto payload,
-            String failureCode,
-            String errorReason
-    ) {
+    public void logDltMessage(DltMessagePayloadDto payload) {
+
         try {
-            // Prevent duplicate DLT inserts
+
             boolean alreadyExists =
-                    dltRepository.existsByTopicAndPartitionAndKafkaOffset(
-                            record.topic(),
-                            record.partition(),
-                            record.offset()
+                    dltRepository.existsByEventIdAndChannel(
+                            payload.getEventId(),
+                            payload.getChannel()
                     );
 
             if (alreadyExists) {
-
                 log.warn(
-                        "⚠ DLT message already logged - Topic: {}, Partition: {}, Offset: {}",
-                        record.topic(),
-                        record.partition(),
-                        record.offset()
+                        "⚠ DLT entry already exists - EventId: {}, Channel: {}",
+                        payload.getEventId(),
+                        payload.getChannel()
                 );
 
                 return;
             }
+
             DltMessage dltMsg = DltMessage.builder()
-                    .topic(record.topic())
-                    .partition(record.partition())
-                    .kafkaOffset(record.offset())
-                    .messageKey(record.key())
-                    .messagePayload(record.value())
-                    .failureCode(failureCode)
-                    .errorReason(errorReason)
+                    .messageKey(payload.getEventId().toString())
+                    .messagePayload(payload.getMessage())
+                    .failureCode(payload.getFailureCode())
+                    .errorReason(payload.getFailureReason())
                     .eventId(payload.getEventId())
                     .userId(payload.getUserId())
                     .channel(payload.getChannel())
@@ -64,35 +55,42 @@ public class DltService {
             dltRepository.save(dltMsg);
 
             log.error(
-                    "✗ Message logged to DLT - Topic: {}, Partition: {}, Offset: {}, Id: {}, Code: {}",
-                    record.topic(),
-                    record.partition(),
-                    record.offset(),
-                    dltMsg.getId(),
-                    failureCode
+                    "☠ DLT persistence successful - EventId: {}, Channel: {}, FailureCode: {}",
+                    payload.getEventId(),
+                    payload.getChannel(),
+                    payload.getFailureCode()
             );
 
+            alertOperationsTeam(
+                    payload,
+                    payload.getFailureCode(),
+                    payload.getFailureReason()
+            );
         } catch (Exception e) {
-            log.error("✗ Failed to log DLT message: {}", e.getMessage(), e);
 
+            log.error(
+                    "⚠ Failed direct DLT persistence - EventId: {}, Error: {}",
+                    payload.getEventId(),
+                    e.getMessage(),
+                    e
+            );
+
+            throw e;
         }
     }
 
     @Transactional
-    public void replayMessage(UUID dltId, String originalTopic) {
+    public void replayMessage(UUID dltId) {
         try {
             var dltMsg = dltRepository.findById(dltId)
                     .orElseThrow(() -> new RuntimeException("DLT message not found: " + dltId));
 
             log.info(
-                    "↻ Replaying DLT message - Id: {}, Original offset: {}, Topic: {}",
-                    dltId,
-                    dltMsg.getKafkaOffset(),
-                    originalTopic
+                    "↻ Replaying DLT message - Id: {}",
+                    dltId
             );
 
             kafkaTemplate.send(
-                    originalTopic,
                     dltMsg.getMessageKey(),
                     dltMsg.getMessagePayload()
             ).get();
@@ -107,6 +105,22 @@ public class DltService {
             log.error("✗ Failed to replay DLT message - Id: {}, Error: {}", dltId, e.getMessage(), e);
             throw new RuntimeException("Failed to replay DLT message: " + e.getMessage(), e);
         }
+    }
+
+    private void alertOperationsTeam(
+            DltMessagePayloadDto payload,
+            String failureCode,
+            String errorReason
+    ) {
+
+        log.warn(
+                "⚠ DLT Alert - EventId: {}, UserId: {}, Channel: {}, FailureCode: {}, Reason: {}",
+                payload.getEventId(),
+                payload.getUserId(),
+                payload.getChannel(),
+                failureCode,
+                errorReason
+        );
     }
 
     public long getUnprocessedCount() {

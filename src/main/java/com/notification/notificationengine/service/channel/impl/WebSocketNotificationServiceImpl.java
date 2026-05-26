@@ -89,6 +89,12 @@ public class WebSocketNotificationServiceImpl implements WebSocketNotificationSe
                         e.getMessage(),
                         errorCode
                 );
+                persistenceService.sendToDlt(
+                        event.getId(),
+                        NotificationChannel.WEBSOCKET,
+                        e.getMessage(),
+                        errorCode
+                );
                 log.error(
                         "✗ WebSocket delivery failed permanently - Event: {}, Error: {}",
                         event.getId(),

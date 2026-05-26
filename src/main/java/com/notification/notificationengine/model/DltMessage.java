@@ -21,15 +21,6 @@ public class DltMessage {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false)
-    private String topic;
-
-    @Column(nullable = false)
-    private Integer partition;
-
-    @Column(nullable = false)
-    private Long kafkaOffset;
-
     @Column(columnDefinition = "TEXT")
     private String messageKey;
 

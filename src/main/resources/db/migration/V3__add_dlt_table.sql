@@ -37,7 +37,7 @@ CREATE INDEX IF NOT EXISTS idx_dlt_failure_code ON dlt_messages(failure_code);
 CREATE INDEX IF NOT EXISTS idx_dlt_kafka_offset ON dlt_messages(topic, kafka_offset);
 
 COMMENT ON TABLE dlt_messages IS
-'PHASE 3: Dead Letter Topic messages. Stores messages that permanently failed (all retries exhausted). Used for inspection and manual replay by operators.';
+'Dead Letter Topic messages. Stores messages that permanently failed (all retries exhausted). Used for inspection and manual replay by operators.';
 
 COMMENT ON COLUMN dlt_messages.processed IS
 'TRUE = operator has reviewed and replayed, FALSE = waiting for operator action';

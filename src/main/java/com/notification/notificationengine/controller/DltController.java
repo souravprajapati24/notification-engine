@@ -80,12 +80,11 @@ public class DltController {
                 ));
             }
 
-            dltService.replayMessage(id, message.getTopic());
+            dltService.replayMessage(id);
 
             return ResponseEntity.ok(Map.of(
                     "status", "REPLAYED",
                     "messageId", id,
-                    "topic", message.getTopic(),
                     "message", "Message queued for replay"
             ));
 
@@ -102,7 +101,6 @@ public class DltController {
             long totalUnprocessed = dltRepository.countByProcessedFalse();
             long total = dltRepository.count();
 
-            var topicStats = dltRepository.countByTopic();
             var failureStats = dltRepository.countByFailureCode();
 
             return ResponseEntity.ok(Map.of(
@@ -110,7 +108,6 @@ public class DltController {
                     "unprocessedMessages", totalUnprocessed,
                     "processedMessages", total - totalUnprocessed,
                     "unprocessedPercentage", total > 0 ? (totalUnprocessed * 100.0 / total) : 0,
-                    "topicBreakdown", topicStats,
                     "failureCodeBreakdown", failureStats
             ));
 

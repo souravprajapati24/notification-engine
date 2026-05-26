@@ -25,8 +25,6 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
     @Async
     public void deliver(NotificationEvent event) {
 
-
-
         try {
 
             String recipientEmail = extractEmailFromEvent(event);
@@ -38,11 +36,15 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
             log.debug("Preparing email delivery - Event: {}, Recipient: {}",
                     event.getId(), maskEmail(recipientEmail));
 
+
+
             SimpleMailMessage message = new SimpleMailMessage();
             message.setTo(recipientEmail);
             message.setSubject("[" + event.getEventType() + "] " + buildSubject(event));
             message.setText(event.getMessage());
             message.setFrom(fromEmail);
+
+
             mailSender.send(message);
 
             log.info("Email sent successfully - Event: {}, Recipient: {}",
@@ -89,6 +91,13 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
                         e.getMessage(),
                         errorCode
                 );
+
+                persistenceService.sendToDlt(
+                        event.getId(),
+                        NotificationChannel.EMAIL,
+                        e.getMessage(),
+                        errorCode);
+
 
                 log.error(
                         "✗ Email delivery failed permanently - Event: {}, Error: {}",

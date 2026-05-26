@@ -1,8 +1,6 @@
 package com.notification.notificationengine.service.persistenceService;
 
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.notification.notificationengine.dto.DltMessagePayloadDto;
 import com.notification.notificationengine.model.NotificationEvent;
 import com.notification.notificationengine.model.NotificationLog;
@@ -11,12 +9,12 @@ import com.notification.notificationengine.model.enums.EventStatus;
 import com.notification.notificationengine.model.enums.NotificationChannel;
 import com.notification.notificationengine.repository.NotificationEventRepository;
 import com.notification.notificationengine.repository.NotificationLogRepository;
+import com.notification.notificationengine.service.dlt.DltService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,8 +29,7 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
 
     private final NotificationEventRepository eventRepository;
     private final NotificationLogRepository logRepository;
-    private final KafkaTemplate<String , String> kafkaTemplate;
-    private final ObjectMapper objectMapper;
+    private final DltService dltService;
 
     @Value("${app.kafka.topics.notification-events}.DLT")
     private  String dltTopic;
@@ -298,7 +295,8 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
     }
 
 
-    private void sendToDlt(
+    @Override
+    public void sendToDlt(
             UUID eventId,
             NotificationChannel channel,
             String failureReason,
@@ -332,20 +330,8 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
                     .message(notifEvent.getMessage())
                     .build();
 
-            String dltMessage = objectMapper.writeValueAsString(payload);
+            dltService.logDltMessage(payload);
 
-            kafkaTemplate.send(dltTopic, eventId.toString(), dltMessage).get();
-
-            log.error(
-                    "→ Message sent to DLT - Topic: {}, EventId: {}, Channel: {}, Code: {}",
-                    dltTopic, eventId, channel, failureCode
-            );
-
-        } catch (JsonProcessingException e) {
-            log.error(
-                    "⚠ Failed to serialize DLT message - EventId: {}, Error: {}",
-                    eventId, e.getMessage()
-            );
         } catch (Exception e) {
             log.error(
                     "⚠ Failed to send message to DLT - EventId: {}, Error: {}",

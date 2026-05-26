@@ -125,7 +125,6 @@ app:
   kafka:
     topics:
       notification-events: notification-event
-      notification-events-dlt: notification-event.DLT
 
   alerts:
     ops-email: ${ALERTS_OPS_EMAIL}
