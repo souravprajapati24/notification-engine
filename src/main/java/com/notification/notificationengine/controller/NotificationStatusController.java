@@ -3,6 +3,7 @@ package com.notification.notificationengine.controller;
 import com.notification.notificationengine.model.NotificationEvent;
 import com.notification.notificationengine.model.NotificationLog;
 import com.notification.notificationengine.model.enums.DeliveryStatus;
+import com.notification.notificationengine.model.enums.NotificationChannel;
 import com.notification.notificationengine.repository.NotificationEventRepository;
 import com.notification.notificationengine.repository.NotificationLogRepository;
 import com.notification.notificationengine.service.idempotency.IdempotencyService;
@@ -41,6 +42,10 @@ public class NotificationStatusController {
             Pageable pageable = PageRequest.of(page, size);
             Page<NotificationLog> logs = logRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
 
+            if(logs.isEmpty()){
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "No notifications found for user or user does not exists for Id : " + userId));
+            }
 
             return ResponseEntity.ok(Map.of(
                     "userId", userId,
@@ -70,8 +75,8 @@ public class NotificationStatusController {
             Optional<NotificationEvent> event = eventRepository.findById(uuid);
 
             if (event.isEmpty()) {
-                log.warn("Event not found: {}", eventId);
-                return ResponseEntity.notFound().build();
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Event not found for ID: " + eventId));
             }
 
             List<NotificationLog> logs = logRepository.findByEventIdOrderByCreatedAt(uuid);
@@ -176,18 +181,17 @@ public class NotificationStatusController {
         log.debug("Fetching deliveries for channel: {}", channel);
 
         try {
-            com.notification.notificationengine.model.enums.NotificationChannel notifChannel =
-                    com.notification.notificationengine.model.enums.NotificationChannel.valueOf(channel.toUpperCase());
+            NotificationChannel notifChannel = NotificationChannel.valueOf(channel.toUpperCase());
 
             Pageable pageable = PageRequest.of(page, size);
             Page<NotificationLog> logs = logRepository.findFailedByChannel(notifChannel, pageable);
 
             return ResponseEntity.ok(Map.of(
                     "channel", channel,
-                    "totalFailed", logs.getTotalElements(),
+                    "total", logs.getTotalElements(),
                     "totalPages", logs.getTotalPages(),
                     "currentPage", page,
-                    "failedLogs", logs.getContent()
+                    "Logs", logs.getContent()
             ));
 
         } catch (IllegalArgumentException e) {
