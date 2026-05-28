@@ -2,7 +2,8 @@ package com.notification.notificationengine.service.channel.impl;
 import com.notification.notificationengine.model.NotificationEvent;
 import com.notification.notificationengine.model.enums.NotificationChannel;
 import com.notification.notificationengine.service.channel.EmailNotificationService;
-import com.notification.notificationengine.service.persistenceService.NotificationPersistenceServiceImpl;
+import com.notification.notificationengine.service.persistenceService.NotificationPersistenceService;
+import com.notification.notificationengine.service.throttle.EmailThrottleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,15 +18,20 @@ import org.springframework.stereotype.Service;
 public class EmailNotificationServiceImpl implements EmailNotificationService {
 
     private final JavaMailSender mailSender;
-    private final NotificationPersistenceServiceImpl persistenceService;
+    private final NotificationPersistenceService persistenceService;
+    private final EmailThrottleService emailThrottleService;
     @Value("${spring.mail.username}")
     private String fromEmail;
 
     @Override
-    @Async
+    @Async("deliveryExecutor")
     public void deliver(NotificationEvent event) {
+        boolean permitted = false;
 
         try {
+
+            emailThrottleService.acquire();
+            permitted = true;
 
             String recipientEmail = extractEmailFromEvent(event);
 
@@ -33,9 +39,8 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
                 throw new IllegalArgumentException("No email address found for user: " + event.getUserId());
             }
 
-            log.debug("Preparing email delivery - Event: {}, Recipient: {}",
-                    event.getId(), maskEmail(recipientEmail));
-
+            log.debug("Preparing email delivery - Event: {}, Recipient: {},AvailableSlots: {}",
+                    event.getId(), maskEmail(recipientEmail),emailThrottleService.getAvailablePermits());
 
 
             SimpleMailMessage message = new SimpleMailMessage();
@@ -56,7 +61,13 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
                     recipientEmail
             );
 
-        }catch (Exception e) {
+        }catch (InterruptedException e){
+            log.warn("Email delivery interrupted while waiting for throttle - Event: {}",
+                    event.getId());
+            Thread.currentThread().interrupt();
+        }
+
+        catch (Exception e) {
             String errorCode = categorizeError(e);
 
             if (persistenceService.isRetriable(errorCode)) {
@@ -68,12 +79,11 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
                         errorCode
                 );
 
-                if(retrySchedule){
+                if (retrySchedule) {
                     log.warn("⟳ Email delivery retriable error - Event: {}, Error: {}, Will retry",
                             event.getId(), errorCode);
 
-                }
-                else {
+                } else {
 
                     log.error(
                             "✗ Email delivery permanently failed after retries exhausted - Event: {}, Error: {}",
@@ -82,8 +92,7 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
                     );
                 }
 
-            }
-            else {
+            } else {
 
                 persistenceService.markChannelFailed(
                         event.getId(),
@@ -103,6 +112,15 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
                         "✗ Email delivery failed permanently - Event: {}, Error: {}",
                         event.getId(),
                         errorCode
+                );
+            }
+        }
+        finally {
+            if (permitted) {
+                emailThrottleService.release();
+                log.debug("Released email throttle permit - Event: {}, AvailableSlots: {}",
+                        event.getId(),
+                        emailThrottleService.getAvailablePermits()
                 );
             }
         }

@@ -33,7 +33,7 @@ spring:
       enable-auto-commit: false
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      max-poll-records: 500
+      max-poll-records: 50
       session-timeout-ms: 30000
       heartbeat-interval-ms: 10000
 
@@ -128,6 +128,17 @@ app:
 
   alerts:
     ops-email: ${ALERTS_OPS_EMAIL}
+
+  throttle:
+    sms-max-concurrent: 20
+    email-max-concurrent: 50
+
+    retry:
+      max-batch-size: 20
+      batch-delay-ms: 100
+
+    api-rate-limit:
+      requests-per-minute: 1000
 
 twilio:
   account-sid: ${TWILIO_ACCOUNT_SID}

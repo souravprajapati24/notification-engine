@@ -5,6 +5,7 @@ import com.notification.notificationengine.model.NotificationEvent;
 import com.notification.notificationengine.model.enums.NotificationChannel;
 import com.notification.notificationengine.service.channel.SmsNotificationService;
 import com.notification.notificationengine.service.persistenceService.NotificationPersistenceService;
+import com.notification.notificationengine.service.throttle.SmsThrottleService;
 import com.twilio.exception.ApiException;
 import com.twilio.rest.api.v2010.account.Message;
 import com.twilio.type.PhoneNumber;
@@ -20,12 +21,17 @@ public class SmsNotificationServiceImpl implements SmsNotificationService {
 
     private final NotificationPersistenceService persistenceService;
     private final TwilioConfig twilioConfig;
+    private final SmsThrottleService smsThrottleService;
 
-    @Async
+    @Async("deliveryExecutor")
     @Override
     public void deliver(NotificationEvent event) {
 
+        boolean permitAcquired = false;
         try {
+
+            smsThrottleService.acquire();
+            permitAcquired = true;
 
             String recipientPhone = extractPhoneFromEvent(event);
 
@@ -33,9 +39,10 @@ public class SmsNotificationServiceImpl implements SmsNotificationService {
                 throw new IllegalArgumentException("No phone number found for user: " + event.getUserId());
             }
 
-            log.debug("Preparing SMS delivery - Event: {}, Recipient: {}",
+            log.debug("Preparing SMS delivery - Event: {}, Recipient: {}, AvailableSlots: {}",
                     event.getId(),
-                    maskPhone(recipientPhone)
+                    maskPhone(recipientPhone),
+                    smsThrottleService.getAvailablePermits()
             );
 
             validateTwilioConfiguration();
@@ -58,7 +65,16 @@ public class SmsNotificationServiceImpl implements SmsNotificationService {
                     recipientPhone
             );
 
-        } catch (Exception e) {
+
+        } catch (InterruptedException e) {
+            log.warn(
+                    "SMS delivery interrupted while waiting for throttle - Event: {}",
+                    event.getId()
+            );
+
+            Thread.currentThread().interrupt();
+
+        }catch (Exception e) {
 
             String errorCode = determineErrorCode(e);
             if (persistenceService.isRetriable(errorCode)) {
@@ -101,6 +117,15 @@ public class SmsNotificationServiceImpl implements SmsNotificationService {
                         "✗ SMS delivery failed permanently - Event: {}, Error: {}",
                         event.getId(),
                         errorCode
+                );
+            }
+        }
+        finally {
+            if (permitAcquired) {
+                smsThrottleService.release();
+                log.debug("Released SMS throttle permit - Event: {}, AvailableSlots: {}",
+                        event.getId(),
+                        smsThrottleService.getAvailablePermits()
                 );
             }
         }

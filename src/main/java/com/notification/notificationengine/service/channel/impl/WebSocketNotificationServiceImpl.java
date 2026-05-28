@@ -20,7 +20,7 @@ public class WebSocketNotificationServiceImpl implements WebSocketNotificationSe
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationPersistenceService persistenceService;
 
-    @Async
+    @Async("deliveryExecutor")
     @Override
     public void deliver(NotificationEvent event) {
 
