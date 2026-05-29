@@ -111,15 +111,20 @@ logging:
 management:
   endpoints:
     web:
+      base-path: /actuator
       exposure:
-        include: health,metrics,prometheus
+        include: health, metrics, prometheus, info
   endpoint:
     health:
-      show-details: always
-  metrics:
-    export:
-      simple:
-        enabled: true
+      show-details: when-authorized
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: Notification Engine
+    version: "@project.version@"
 
 app:
   kafka:

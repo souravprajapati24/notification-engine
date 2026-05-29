@@ -92,8 +92,21 @@ public interface NotificationLogRepository extends JpaRepository<NotificationLog
 """)
     void resetLogToPending(@Param("logId") UUID logId);
 
+    @Query(
+            value = """
+        SELECT delivery_date, channel, status, count
+        FROM notification_delivery_summary
+        WHERE delivery_date >= CURRENT_DATE - CAST(:days AS INTEGER)
+        ORDER BY delivery_date ASC, channel ASC
+    """,
+            nativeQuery = true
+    )
+    List<Object[]> getDailyDeliveryTrend(@Param("days") int days);
+
 
     boolean existsByEventId(UUID eventId);
 
     Page<NotificationLog> findByStatus(DeliveryStatus status, Pageable pageable);
+
+    Page<NotificationLog> findByUserIdAndCreatedAtBetween(String userId, LocalDateTime from, LocalDateTime to, Pageable pageable);
 }
