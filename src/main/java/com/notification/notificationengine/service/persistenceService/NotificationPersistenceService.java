@@ -37,6 +37,9 @@ public interface NotificationPersistenceService {
     );
 
     @Transactional
+    void resetLogToPending(UUID logId);
+
+    @Transactional
     boolean markChannelForRetry(
             UUID eventId,
             NotificationChannel channel,

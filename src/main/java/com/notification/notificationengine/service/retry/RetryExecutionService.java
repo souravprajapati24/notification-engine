@@ -60,6 +60,7 @@ public class RetryExecutionService {
             }
 
             router.route(eventForChannel);
+            persistenceService.resetLogToPending(retryLog.getId());
 
         } catch (Exception e) {
             log.error(

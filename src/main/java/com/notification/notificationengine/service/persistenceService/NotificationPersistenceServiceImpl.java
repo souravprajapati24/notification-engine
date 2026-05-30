@@ -222,6 +222,11 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
             throw new RuntimeException("Failed to update delivery failure status", e);
         }
     }
+    @Transactional
+    @Override
+    public void resetLogToPending(UUID logId) {
+        logRepository.resetLogToPending(logId);
+    }
 
     @Transactional
     @Override
