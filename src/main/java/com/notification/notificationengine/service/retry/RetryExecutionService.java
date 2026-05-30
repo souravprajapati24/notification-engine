@@ -59,8 +59,9 @@ public class RetryExecutionService {
                     log.warn("⚠ Unknown channel for retry: {}", retryLog.getChannel());
             }
 
-            router.route(eventForChannel);
             persistenceService.resetLogToPending(retryLog.getId());
+            router.route(eventForChannel);
+
 
         } catch (Exception e) {
             log.error(
