@@ -1,10 +1,13 @@
 package com.notification.notificationengine.service.dlt;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.notification.notificationengine.dto.DltMessagePayloadDto;
 import com.notification.notificationengine.model.DltMessage;
+import com.notification.notificationengine.model.NotificationEvent;
 import com.notification.notificationengine.repository.DltMessageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +21,9 @@ public class DltService {
 
     private final DltMessageRepository dltRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
-
+    @Value("${app.kafka.topics.notification-events}")
+    private String topic;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public void logDltMessage(DltMessagePayloadDto payload) {
@@ -90,9 +95,19 @@ public class DltService {
                     dltId
             );
 
-            kafkaTemplate.send(
+            NotificationEvent event = objectMapper.readValue(
+                    dltMsg.getMessagePayload(),
+                    NotificationEvent.class
+            );
+
+            UUID replayEventId = UUID.randomUUID();
+            event.setId(replayEventId);
+            String replayPayload =
+                    objectMapper.writeValueAsString(event);
+
+            kafkaTemplate.send(topic,
                     dltMsg.getMessageKey(),
-                    dltMsg.getMessagePayload()
+                    replayPayload
             ).get();
 
             dltMsg.setProcessed(true);

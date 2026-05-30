@@ -4,6 +4,7 @@ import com.notification.notificationengine.model.NotificationEvent;
 import com.notification.notificationengine.model.NotificationLog;
 import com.notification.notificationengine.repository.NotificationEventRepository;
 import com.notification.notificationengine.router.NotificationRouter;
+import com.notification.notificationengine.service.persistenceService.NotificationPersistenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import java.util.UUID;
 public class RetryExecutionService {
     private final NotificationEventRepository eventRepository;
     private final NotificationRouter router;
+    private final NotificationPersistenceService persistenceService;
 
 
     @Transactional

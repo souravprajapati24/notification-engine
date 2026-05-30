@@ -1,6 +1,7 @@
 package com.notification.notificationengine.service.persistenceService;
 
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.notification.notificationengine.dto.DltMessagePayloadDto;
 import com.notification.notificationengine.model.NotificationEvent;
 import com.notification.notificationengine.model.NotificationLog;
@@ -30,6 +31,7 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
     private final NotificationEventRepository eventRepository;
     private final NotificationLogRepository logRepository;
     private final DltService dltService;
+    private final ObjectMapper objectMapper;
 
     @Value("${app.kafka.topics.notification-events}.DLT")
     private  String dltTopic;
@@ -311,6 +313,7 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
             }
 
             NotificationEvent notifEvent = eventOpt.get();
+            String messagePayload = objectMapper.writeValueAsString(notifEvent);
 
             var logEntry = logRepository.findByEventIdAndChannelAndStatus(
                     eventId,
@@ -327,7 +330,7 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
                     .retryCount(logEntry.map(NotificationLog::getRetryCount).orElse(0))
                     .failedAt(LocalDateTime.now())
                     .eventType(notifEvent.getEventType())
-                    .message(notifEvent.getMessage())
+                    .message(messagePayload)
                     .build();
 
             dltService.logDltMessage(payload);
