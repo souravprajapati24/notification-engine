@@ -1,0 +1,68 @@
+spring:
+
+  datasource:
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  kafka:
+
+    admin:
+      auto-create: true
+    consumer:
+      auto-offset-reset: earliest
+    listener:
+      concurrency: 1
+
+
+server:
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: always
+
+logging:
+  level:
+
+    com.notification.notificationengine: DEBUG
+    org.springframework.kafka: INFO
+    org.apache.kafka: INFO
+    org.springframework.data: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: DEBUG
+    org.springframework.web: DEBUG
+    org.postgresql: INFO
+
+
+  file:
+    name: ""
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+
+app:
+  throttle:
+
+    sms-max-concurrent: 5
+    email-max-concurrent: 10
+
+    retry:
+      max-batch-size: 5
+      batch-delay-ms: 500
+
+    api-rate-limit:
+      requests-per-minute: 10000

@@ -2,6 +2,9 @@ spring:
   application:
     name: notification-engine
 
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -77,36 +80,14 @@ spring:
         queue-capacity: 100
       thread-name-prefix: notification-async-
 
+
 server:
-  port: ${SERVER_PORT}
+  port: ${SERVER_PORT:8080}
   servlet:
     context-path: /
   compression:
     enabled: true
     min-response-size: 1024
-
-logging:
-  level:
-    com.notification.engine: DEBUG
-    org.springframework.kafka: INFO
-    org.springframework.data: INFO
-    org.springframework.web: INFO
-    org.hibernate: INFO
-    org.hibernate.SQL: warn
-    org.hibernate.orm.jdbc.bind: WARN
-    org.postgresql: WARN
-    org.apache.kafka: WARN
-
-  pattern:
-    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-
-  file:
-    name: logs/notification-engine.log
-  logback:
-    rollingpolicy:
-      max-file-size: 10MB
-      max-history: 10
 
 management:
   endpoints:
@@ -131,6 +112,9 @@ app:
     topics:
       notification-events: notification-event
 
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
   alerts:
     ops-email: ${ALERTS_OPS_EMAIL}
 
@@ -144,6 +128,7 @@ app:
 
     api-rate-limit:
       requests-per-minute: 1000
+
 
 twilio:
   account-sid: ${TWILIO_ACCOUNT_SID}
