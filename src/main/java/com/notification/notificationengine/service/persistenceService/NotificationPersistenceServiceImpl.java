@@ -249,13 +249,13 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
 
             if (logEntry.isPresent()) {
                 NotificationLog logg = logEntry.get();
-
+                Long backoffSeconds = getBackoffInterval(logg.getRetryCount());
                 logg.setRetryCount(logg.getRetryCount() + 1);
                 logg.setFailureReason(failureReason);
                 logg.setFailureCode(failureCode);
                 logg.setLastRetryAt(LocalDateTime.now());
 
-                Long backoffSeconds = getBackoffInterval(logg.getRetryCount());
+
 
                 if (backoffSeconds == null) {
                     logg.setStatus(DeliveryStatus.FAILED);
