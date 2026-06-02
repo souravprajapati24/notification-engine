@@ -45,7 +45,7 @@ spring:
       retries: 3
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
-      compression-type: snappy
+      compression-type: lz4
 
     listener:
       ack-mode: MANUAL
