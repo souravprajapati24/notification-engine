@@ -4,23 +4,26 @@ import com.notification.notificationengine.model.enums.NotificationChannel;
 import com.notification.notificationengine.service.channel.EmailNotificationService;
 import com.notification.notificationengine.service.persistenceService.NotificationPersistenceService;
 import com.notification.notificationengine.service.throttle.EmailThrottleService;
+import com.resend.Resend;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import com.resend.services.emails.model.CreateEmailOptions;
+import com.resend.services.emails.model.CreateEmailResponse;
+
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EmailNotificationServiceImpl implements EmailNotificationService {
 
-    private final JavaMailSender mailSender;
     private final NotificationPersistenceService persistenceService;
     private final EmailThrottleService emailThrottleService;
-    @Value("${spring.mail.username}")
+    @Value("${resend.api-key}")
+    private String apiKey;
+    @Value("${resend.from-email}")
     private String fromEmail;
 
     @Override
@@ -43,17 +46,20 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
                     event.getId(), maskEmail(recipientEmail),emailThrottleService.getAvailablePermits());
 
 
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setTo(recipientEmail);
-            message.setSubject("[" + event.getEventType() + "] " + buildSubject(event));
-            message.setText(event.getMessage());
-            message.setFrom(fromEmail);
+            Resend resend = new Resend(apiKey);
+
+            CreateEmailOptions createEmailRequest = CreateEmailOptions.builder()
+                    .from(fromEmail)
+                    .to(recipientEmail)
+                    .subject("[" + event.getEventType() + "] " + buildSubject(event))
+                    .text(event.getMessage())
+                    .build();
+            CreateEmailResponse response = resend.emails().send(createEmailRequest);
 
 
-            mailSender.send(message);
 
-            log.info("Email sent successfully - Event: {}, Recipient: {}",
-                    event.getId(), maskEmail(recipientEmail));
+            log.info("Email sent successfully - Event: {}, Recipient: {}, ResendId: {}",
+                    event.getId(), maskEmail(recipientEmail) , response.getId());
 
             persistenceService.markChannelDelivered(
                     event.getId(),
@@ -156,26 +162,19 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
     }
 
     private String categorizeError(Exception e) {
+        String message = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
 
-        String message = e.getMessage();
-        if (message == null) {
-            return "EMAIL_UNKNOWN_ERROR";
-        }
-        message = message.toLowerCase();
+        if (message.contains("timeout") || message.contains("timed out"))          return "EMAIL_TIMEOUT";
+        if (message.contains("connection"))                                          return "EMAIL_CONNECTION_ERROR";
+        if (message.contains("rate limit") || message.contains("429"))              return "EMAIL_RATE_LIMITED";
+        if (message.contains("unauthorized") || message.contains("401"))            return "EMAIL_AUTH_FAILED";
+        if (message.contains("500") || message.contains("internal server"))         return "EMAIL_SERVER_ERROR";
 
-        if (message.contains("timeout") || message.contains("timed out")) {
-            return "EMAIL_TIMEOUT";
-        } else if (message.contains("invalid") || message.contains("syntax")) {
-            return "EMAIL_INVALID_FORMAT";
-        } else if (message.contains("auth") || message.contains("authentication")) {
-            return "EMAIL_AUTH_FAILED";
-        } else if (message.contains("429") || message.contains("rate")) {
-            return "EMAIL_RATE_LIMITED";
-        } else if (message.contains("5")) {
-            return "EMAIL_SERVER_ERROR";
-        } else {
-            return "EMAIL_UNKNOWN_ERROR";
-        }
+        if (message.contains("domain is not verified") || message.contains("validation_error")
+                || message.contains("you can only send testing emails"))         return "EMAIL_INVALID_SENDER";
+        if (message.contains("invalid") || message.contains("400"))                return "EMAIL_INVALID_FORMAT";
+
+        return "EMAIL_UNKNOWN_ERROR";
     }
 
     private String maskEmail(String email) {
