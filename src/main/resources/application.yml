@@ -52,20 +52,6 @@ spring:
       concurrency: 3
       poll-timeout: 3000
 
-  mail:
-    host: smtp.gmail.com
-    port: 587
-    username: ${MAIL_USERNAME}
-    password: ${MAIL_PASSWORD}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-            required: true
-          timeout: 5000
-          connectiontimeout: 5000
 
   jackson:
     default-property-inclusion: non_null
@@ -134,3 +120,7 @@ twilio:
   account-sid: ${TWILIO_ACCOUNT_SID}
   auth-token: ${TWILIO_AUTH_TOKEN}
   from-number: ${TWILIO_FROM_NUMBER}
+
+resend:
+  api-key: ${RESEND_API_KEY}
+  from-email: ${FROM_EMAIL}
