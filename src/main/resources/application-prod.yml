@@ -17,7 +17,7 @@ spring:
 
   kafka:
     admin:
-      auto-create: false
+      auto-create: true
 
     consumer:
 
