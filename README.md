@@ -25,11 +25,6 @@ A production-grade, event-driven notification delivery system built with Java 21
 16. [Running Locally](#16-running-locally)
 17. [Testing Guide](#17-testing-guide)
 18. [Production Features](#18-production-features)
-19. [Scalability Considerations](#19-scalability-considerations)
-20. [Future Improvements](#20-future-improvements)
-21. [Interview Questions and Answers](#21-interview-questions-and-answers)
-22. [Resume Bullet Points](#22-resume-bullet-points)
-
 ---
 
 ## 1. Problem Statement
